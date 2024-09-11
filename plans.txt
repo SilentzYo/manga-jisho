@@ -1,5 +1,0 @@
-Plans:
-Try to get ocr (tesseract) to sent text to gpt-4 to translate, then post on screen in correct locations
-
-Current:
-Try to get tesseract to work - read Japanese text and plug to text file
