@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Manga Jisho",
+  "version": "0.1.0",
+  "description": "Hover lookup and page translation for manga",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
