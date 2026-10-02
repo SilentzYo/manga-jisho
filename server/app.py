@@ -6,6 +6,7 @@ from mokuro.manga_page_ocr import MangaPageOcr
 from mokuro.utils import InvalidImage
 
 from reader import read_page
+from words import tokenize
 
 models = {}
 
@@ -25,6 +26,8 @@ def ocr(image: UploadFile):
         blocks = read_page(models["ocr"], image.file)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
+    for block in blocks:
+        block["tokens"] = tokenize(block["text"])
     return {"blocks": blocks}
 
 
