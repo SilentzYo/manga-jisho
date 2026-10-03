@@ -1,13 +1,20 @@
+import io
 import os
 import sys
 import time
 from pathlib import Path
 
+import cv2
 import requests
+import torch
+from manga_ocr.ocr import post_process
 from mokuro.manga_page_ocr import MangaPageOcr
+from mokuro.utils import imread
 from PIL import Image, ImageDraw
 
 TEST_IMAGES = Path(__file__).parent.parent / "testimg"
+OCR_THREADS = 6
+BATCH_SIZE = 32
 
 
 def find_image(name):
@@ -20,30 +27,87 @@ def bounds(points):
     return [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
 
 
-def read_lines(block):
+def read_lines(texts, coords):
     lines, start = [], 0
-    for text, points in zip(block["lines"], block["lines_coords"]):
+    for text, points in zip(texts, coords):
         if text:
             lines.append({"text": text, "start": start, "box": bounds(points)})
         start += len(text)
     return lines
 
 
-def read_page(ocr, path):
-    page = ocr(path)
-    return {
-        "width": page["img_width"],
-        "height": page["img_height"],
-        "blocks": [
-            {
-                "box": [int(n) for n in block["box"]],
-                "vertical": bool(block["vertical"]),
-                "text": "".join(block["lines"]),
-                "lines": read_lines(block),
-            }
-            for block in page["blocks"]
-        ],
-    }
+class PageReader:
+    def __init__(self):
+        torch.set_num_threads(OCR_THREADS)
+        self.pages = MangaPageOcr()
+        self.lines = self.pages.mocr
+
+    def cut(self, image, mask, block, index):
+        pages = self.pages
+        max_ratio = pages.max_ratio_vert if block.vertical else pages.max_ratio_hor
+        chunks, _ = pages.split_into_chunks(
+            image, mask, block, index, pages.text_height, max_ratio, pages.anchor_window
+        )
+        for chunk in chunks:
+            if block.vertical:
+                chunk = cv2.rotate(chunk, cv2.ROTATE_90_CLOCKWISE)
+            yield Image.fromarray(chunk).convert("L").convert("RGB")
+
+    def recognise(self, crops):
+        texts = []
+        for i in range(0, len(crops), BATCH_SIZE):
+            pixels = self.lines.processor(crops[i:i + BATCH_SIZE], return_tensors="pt").pixel_values
+            with torch.inference_mode():
+                ids = self.lines.model.generate(pixels, max_length=300)
+            texts += [post_process(text) for text in self.lines.tokenizer.batch_decode(ids, skip_special_tokens=True)]
+        return texts
+
+    def read(self, path):
+        image = imread(path)
+        _, mask, blocks = self.pages.text_detector(image, refine_mode=1, keep_undetected_mask=True)
+        coords = [block.lines_array() for block in blocks]
+
+        crops, owners = [], []
+        for b, block in enumerate(blocks):
+            for l in range(len(coords[b])):
+                for crop in self.cut(image, mask, block, l):
+                    crops.append(crop)
+                    owners.append((b, l))
+
+        texts = [[""] * len(lines) for lines in coords]
+        for (b, l), text in zip(owners, self.recognise(crops)):
+            texts[b][l] += text
+
+        height, width = image.shape[:2]
+        return {
+            "width": width,
+            "height": height,
+            "blocks": [
+                {
+                    "box": [int(n) for n in block.xyxy],
+                    "vertical": bool(block.vertical),
+                    "text": "".join(lines),
+                    "lines": read_lines(lines, block_coords),
+                }
+                for block, lines, block_coords in zip(blocks, texts, coords)
+            ],
+        }
+
+
+page_reader = None
+
+
+def load():
+    global page_reader
+    page_reader = PageReader()
+
+
+def ready():
+    return page_reader is not None
+
+
+def read(data):
+    return page_reader.read(io.BytesIO(data))
 
 
 def translate(texts, key, target="EN-US"):
@@ -78,9 +142,9 @@ if __name__ == "__main__":
     path = find_image(args[0] if args else "01.jpg")
     key = os.environ.get("DEEPL_API_KEY")
 
-    ocr = MangaPageOcr()
+    reader = PageReader()
     start = time.time()
-    blocks = read_page(ocr, path)["blocks"]
+    blocks = reader.read(path)["blocks"]
     print(f"\n{path.name}: {len(blocks)} text blocks in {time.time() - start:.1f}s\n")
 
     if key and blocks:

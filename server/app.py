@@ -1,32 +1,37 @@
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
-from threading import Lock
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
-from mokuro.manga_page_ocr import MangaPageOcr
 from mokuro.utils import InvalidImage
 
+import reader
 from dictionary import lookup
-from reader import read_page
 
-models = {}
-lock = Lock()
+ocr_worker = None
+
+
+def in_worker(fn, *args):
+    return asyncio.get_running_loop().run_in_executor(ocr_worker, fn, *args)
 
 
 @asynccontextmanager
 async def lifespan(app):
-    models["ocr"] = MangaPageOcr()
-    yield
+    global ocr_worker
+    with ProcessPoolExecutor(1, initializer=reader.load) as ocr_worker:
+        await in_worker(reader.ready)
+        yield
 
 
 app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration": True})
 
 
 @app.post("/ocr")
-def ocr(image: UploadFile):
+async def ocr(image: UploadFile):
+    data = await image.read()
     try:
-        with lock:
-            return read_page(models["ocr"], image.file)
+        return await in_worker(reader.read, data)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
 
