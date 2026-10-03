@@ -8,7 +8,6 @@ from mokuro.utils import InvalidImage
 
 from dictionary import lookup
 from reader import read_page
-from words import tokenize
 
 models = {}
 lock = Lock()
@@ -27,12 +26,9 @@ app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration"
 def ocr(image: UploadFile):
     try:
         with lock:
-            page = read_page(models["ocr"], image.file)
+            return read_page(models["ocr"], image.file)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
-    for block in page["blocks"]:
-        block["tokens"] = tokenize(block["text"])
-    return page
 
 
 @app.get("/lookup")

@@ -1,11 +1,24 @@
 const SERVER = "http://localhost:7331";
 
+const handlers = {
+  ocr: message => ocr(message.source, message.referrer),
+  lookup: message => lookUp(message.text, message.at),
+};
+
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
-  if (message.type === "ocr") {
-    ocr(message.source, message.referrer).then(sendResponse, error => sendResponse({ error: error.message }));
-    return true;
-  }
+  const handler = handlers[message.type];
+  if (!handler) return;
+  handler(message).then(sendResponse, error => sendResponse({ error: error.message }));
+  return true;
 });
+
+async function server(path, options) {
+  const response = await fetch(`${SERVER}${path}`, options).catch(() => {
+    throw new Error("Can't reach the server, is it running?");
+  });
+  if (!response.ok) throw new Error(`Server error (HTTP ${response.status})`);
+  return response.json();
+}
 
 async function download(source, referrer) {
   if (source.startsWith("data:")) return fetch(source);
@@ -37,10 +50,9 @@ async function ocr(source, referrer) {
 
   const form = new FormData();
   form.append("image", await image.blob(), "page");
+  return server("/ocr", { method: "POST", body: form });
+}
 
-  const response = await fetch(`${SERVER}/ocr`, { method: "POST", body: form }).catch(() => {
-    throw new Error("Can't reach the OCR server, is it running?");
-  });
-  if (!response.ok) throw new Error(`OCR server error (HTTP ${response.status})`);
-  return response.json();
+function lookUp(text, at) {
+  return server(`/lookup?${new URLSearchParams({ text, at })}`);
 }
