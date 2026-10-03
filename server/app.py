@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from mokuro.manga_page_ocr import MangaPageOcr
 from mokuro.utils import InvalidImage
 
+from dictionary import lookup
 from reader import read_page
 from words import tokenize
 
@@ -32,6 +33,11 @@ def ocr(image: UploadFile):
     for block in page["blocks"]:
         block["tokens"] = tokenize(block["text"])
     return page
+
+
+@app.get("/lookup")
+def look_up(text: str, at: int):
+    return lookup(text, at)
 
 
 if __name__ == "__main__":
