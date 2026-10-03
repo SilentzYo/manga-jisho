@@ -3,6 +3,8 @@
   "name": "Manga Jisho",
   "version": "0.1.0",
   "description": "Hover lookup and page translation for manga",
+  "permissions": ["declarativeNetRequestWithHostAccess"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },

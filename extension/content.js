@@ -1,12 +1,7 @@
-console.log("[manga-jisho] loaded on", location.href);
-
-chrome.runtime.sendMessage({ type: "ping" }, reply => {
-  console.log("[manga-jisho] background says", reply);
-});
-
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 400;
 const pages = new WeakMap();
+const mouse = { x: 0, y: 0 };
 
 function sourceOf(element) {
   return element.tagName === "IMG" ? element.currentSrc || element.src : "canvas";
@@ -31,6 +26,44 @@ function scanSoon() {
   clearTimeout(timer);
   timer = setTimeout(scan, 200);
 }
+
+function pageAt(x, y) {
+  return [...document.querySelectorAll(".manga-jisho-page")].find(page => {
+    const box = page.getBoundingClientRect();
+    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+  });
+}
+
+async function readPage(page) {
+  const source = page.tagName === "IMG" ? sourceOf(page) : page.toDataURL("image/jpeg");
+  console.log("[manga-jisho] reading", sourceOf(page));
+
+  const started = performance.now();
+  const result = await chrome.runtime.sendMessage({ type: "ocr", source, referrer: location.href });
+  const seconds = ((performance.now() - started) / 1000).toFixed(1);
+
+  if (result.error) {
+    console.warn("[manga-jisho]", result.error);
+  } else {
+    console.log("[manga-jisho]", result.blocks.length, "blocks in", seconds, "s", result.blocks);
+  }
+}
+
+addEventListener("mousemove", event => {
+  mouse.x = event.clientX;
+  mouse.y = event.clientY;
+}, { passive: true });
+
+addEventListener("keydown", event => {
+  if (!event.altKey || event.code !== "KeyO") return;
+  const page = pageAt(mouse.x, mouse.y);
+  if (!page) {
+    console.log("[manga-jisho] no page under the mouse");
+    return;
+  }
+  event.preventDefault();
+  readPage(page).catch(error => console.warn("[manga-jisho]", error.message));
+});
 
 new MutationObserver(scanSoon).observe(document.documentElement, {
   childList: true,
