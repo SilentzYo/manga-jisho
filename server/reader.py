@@ -41,6 +41,13 @@ class PageReader:
         torch.set_num_threads(OCR_THREADS)
         self.pages = MangaPageOcr()
         self.lines = self.pages.mocr
+        self.models = {"accurate": self.lines.model}
+
+    def model(self, name):
+        if name not in self.models:
+            accurate = self.models["accurate"]
+            self.models[name] = torch.ao.quantization.quantize_dynamic(accurate, {torch.nn.Linear}, dtype=torch.qint8)
+        return self.models[name]
 
     def cut(self, image, mask, block, index):
         pages = self.pages
@@ -53,16 +60,16 @@ class PageReader:
                 chunk = cv2.rotate(chunk, cv2.ROTATE_90_CLOCKWISE)
             yield Image.fromarray(chunk).convert("L").convert("RGB")
 
-    def recognise(self, crops):
+    def recognise(self, crops, model):
         texts = []
         for i in range(0, len(crops), BATCH_SIZE):
             pixels = self.lines.processor(crops[i:i + BATCH_SIZE], return_tensors="pt").pixel_values
             with torch.inference_mode():
-                ids = self.lines.model.generate(pixels, max_length=300)
+                ids = self.model(model).generate(pixels, max_length=300)
             texts += [post_process(text) for text in self.lines.tokenizer.batch_decode(ids, skip_special_tokens=True)]
         return texts
 
-    def read(self, path):
+    def read(self, path, model="accurate"):
         image = imread(path)
         _, mask, blocks = self.pages.text_detector(image, refine_mode=1, keep_undetected_mask=True)
         coords = [block.lines_array() for block in blocks]
@@ -75,7 +82,7 @@ class PageReader:
                     owners.append((b, l))
 
         texts = [[""] * len(lines) for lines in coords]
-        for (b, l), text in zip(owners, self.recognise(crops)):
+        for (b, l), text in zip(owners, self.recognise(crops, model)):
             texts[b][l] += text
 
         height, width = image.shape[:2]
@@ -106,8 +113,8 @@ def ready():
     return page_reader is not None
 
 
-def read(data):
-    return page_reader.read(io.BytesIO(data))
+def read(data, model):
+    return page_reader.read(io.BytesIO(data), model)
 
 
 def translate(texts, key, target="EN-US"):

@@ -1,10 +1,11 @@
-.manga-jisho-page {
+[data-manga-jisho-borders] .manga-jisho-page {
   outline: 3px solid #e33 !important;
   outline-offset: -3px !important;
 }
 
-.manga-jisho-reading {
-  outline-color: #f90 !important;
+.manga-jisho-page.manga-jisho-reading {
+  outline: 3px solid #f90 !important;
+  outline-offset: -3px !important;
 }
 
 .manga-jisho-block,
@@ -16,7 +17,7 @@
   box-sizing: border-box;
 }
 
-.manga-jisho-block {
+[data-manga-jisho-borders] .manga-jisho-block {
   border: 2px solid #e33;
 }
 

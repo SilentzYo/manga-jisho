@@ -1,9 +1,26 @@
 const sentence = document.querySelector("#sentence");
 const jisho = document.querySelector("#jisho");
 const entries = document.querySelector("#entries");
+const form = document.querySelector("#settings");
 let windowId;
 
 chrome.windows.getCurrent().then(current => windowId = current.id);
+
+chrome.storage.local.get(DEFAULT_SETTINGS).then(saved => {
+  form.elements.model.value = saved.model;
+  form.elements.readAhead.value = saved.readAhead;
+  form.elements.borders.checked = saved.borders;
+});
+
+form.addEventListener("change", () => {
+  const readAhead = Math.round(Number(form.elements.readAhead.value));
+  form.elements.readAhead.value = Math.min(10, Math.max(0, readAhead || 0));
+  chrome.storage.local.set({
+    model: form.elements.model.value,
+    readAhead: Number(form.elements.readAhead.value),
+    borders: form.elements.borders.checked,
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.type === "word" && sender.tab?.windowId === windowId) {

@@ -3,7 +3,7 @@ const SERVER = "http://localhost:7331";
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
 const handlers = {
-  ocr: message => ocr(message.source, message.referrer),
+  ocr: message => ocr(message.source, message.referrer, message.model),
   lookup: message => lookUp(message.text, message.at),
 };
 
@@ -46,13 +46,13 @@ async function download(source, referrer) {
   return fetch(source, { credentials: "include" });
 }
 
-async function ocr(source, referrer) {
+async function ocr(source, referrer, model) {
   const image = await download(source, referrer);
   if (!image.ok) throw new Error(`Couldn't download the page (HTTP ${image.status})`);
 
   const form = new FormData();
   form.append("image", await image.blob(), "page");
-  return server("/ocr", { method: "POST", body: form });
+  return server(`/ocr?${new URLSearchParams({ model })}`, { method: "POST", body: form });
 }
 
 function lookUp(text, at) {

@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
+from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -28,10 +29,10 @@ app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration"
 
 
 @app.post("/ocr")
-async def ocr(image: UploadFile):
+async def ocr(image: UploadFile, model: Literal["accurate", "fast"] = "accurate"):
     data = await image.read()
     try:
-        return await in_worker(reader.read, data)
+        return await in_worker(reader.read, data, model)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
 

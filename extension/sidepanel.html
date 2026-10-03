@@ -8,10 +8,33 @@
 </head>
 <body>
   <header>
-    <p id="sentence" class="hint">Hover over a word on a manga page.</p>
+    <p id="sentence" class="hint">Hold Shift and hover over a word on a manga page.</p>
     <a id="jisho" target="_blank" hidden></a>
   </header>
   <main id="entries"></main>
+  <footer>
+    <details>
+      <summary>Settings</summary>
+      <form id="settings">
+        <label>
+          <span>OCR model</span>
+          <select name="model">
+            <option value="accurate">Accurate</option>
+            <option value="fast">Fast (a few more mistakes)</option>
+          </select>
+        </label>
+        <label>
+          <span>Read ahead</span>
+          <span><input name="readAhead" type="number" min="0" max="10"> pages</span>
+        </label>
+        <label>
+          <span>Show borders</span>
+          <input name="borders" type="checkbox">
+        </label>
+      </form>
+    </details>
+  </footer>
+  <script src="settings.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

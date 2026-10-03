@@ -4,6 +4,8 @@ const pages = new WeakMap();
 const results = new Map();
 const lookups = new Map();
 const mouse = { x: 0, y: 0 };
+const settings = { ...DEFAULT_SETTINGS };
+let shift = false;
 let wanted = null;
 let shownWord = null;
 
@@ -36,6 +38,22 @@ function scan() {
       console.log("[manga-jisho] page", Math.round(width), "x", Math.round(height), source);
     }
   }
+  readAhead();
+}
+
+function visibleArea(page) {
+  const { left, top, right, bottom } = page.getBoundingClientRect();
+  const width = Math.min(right, innerWidth) - Math.max(left, 0);
+  const height = Math.min(bottom, innerHeight) - Math.max(top, 0);
+  return Math.max(width, 0) * Math.max(height, 0);
+}
+
+function readAhead() {
+  const all = [...document.querySelectorAll(".manga-jisho-page")];
+  const areas = all.map(visibleArea);
+  const current = areas.indexOf(Math.max(...areas));
+  if (current < 0 || areas[current] === 0) return;
+  all.slice(current, current + settings.readAhead + 1).forEach(resultFor);
 }
 
 let timer;
@@ -61,7 +79,12 @@ function pageAt(x, y) {
 
 async function readPage(page) {
   const source = page.tagName === "IMG" ? sourceOf(page) : page.toDataURL("image/jpeg");
-  const result = await chrome.runtime.sendMessage({ type: "ocr", source, referrer: location.href });
+  const result = await chrome.runtime.sendMessage({
+    type: "ocr",
+    source,
+    referrer: location.href,
+    model: settings.model,
+  });
   if (result.error) throw new Error(result.error);
   return result;
 }
@@ -168,7 +191,7 @@ function hovered() {
 
 function update() {
   const target = hovered();
-  if (!target) {
+  if (!target || !shift) {
     blockMark.style.display = "none";
     wanted = null;
     hideWord();
@@ -183,13 +206,44 @@ function update() {
   if (word) showWord(block, box, scale, word);
 }
 
+function setShift(down) {
+  if (shift === down) return;
+  shift = down;
+  update();
+}
+
 addEventListener("mousemove", event => {
   mouse.x = event.clientX;
   mouse.y = event.clientY;
+  shift = event.shiftKey;
   update();
 }, { passive: true });
 
-addEventListener("scroll", update, { capture: true, passive: true });
+addEventListener("keydown", event => event.key === "Shift" && setShift(true));
+addEventListener("keyup", event => event.key === "Shift" && setShift(false));
+addEventListener("blur", () => setShift(false));
+
+addEventListener("scroll", () => {
+  update();
+  scanSoon();
+}, { capture: true, passive: true });
+
+function applySettings() {
+  document.documentElement.toggleAttribute("data-manga-jisho-borders", settings.borders);
+  scanSoon();
+}
+
+chrome.storage.local.get(DEFAULT_SETTINGS).then(saved => {
+  Object.assign(settings, saved);
+  applySettings();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  for (const [key, change] of Object.entries(changes)) settings[key] = change.newValue;
+  if (changes.model) results.clear();
+  applySettings();
+});
 
 new MutationObserver(records => {
   if (records.some(record => !overlay.contains(record.target))) scanSoon();

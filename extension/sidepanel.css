@@ -126,3 +126,36 @@ li + li {
   color: var(--muted);
   font-size: 11px;
 }
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 10px 16px;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#settings {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#settings label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+#settings select,
+#settings input {
+  font: inherit;
+}
+
+#settings input[type="number"] {
+  width: 4em;
+}
