@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from threading import Lock
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -9,6 +10,7 @@ from reader import read_page
 from words import tokenize
 
 models = {}
+lock = Lock()
 
 
 @asynccontextmanager
@@ -23,12 +25,13 @@ app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration"
 @app.post("/ocr")
 def ocr(image: UploadFile):
     try:
-        blocks = read_page(models["ocr"], image.file)
+        with lock:
+            page = read_page(models["ocr"], image.file)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
-    for block in blocks:
+    for block in page["blocks"]:
         block["tokens"] = tokenize(block["text"])
-    return {"blocks": blocks}
+    return page
 
 
 if __name__ == "__main__":

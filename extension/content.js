@@ -1,7 +1,14 @@
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 400;
 const pages = new WeakMap();
+const results = new Map();
 const mouse = { x: 0, y: 0 };
+
+const blockMark = document.createElement("div");
+const wordMark = document.createElement("div");
+blockMark.className = "manga-jisho-block";
+wordMark.className = "manga-jisho-word";
+document.documentElement.append(blockMark, wordMark);
 
 function sourceOf(element) {
   return element.tagName === "IMG" ? element.currentSrc || element.src : "canvas";
@@ -27,43 +34,107 @@ function scanSoon() {
   timer = setTimeout(scan, 200);
 }
 
+function contains([x1, y1, x2, y2], x, y) {
+  return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+}
+
+function distance([x1, y1, x2, y2], x, y) {
+  return Math.hypot(Math.max(x1 - x, 0, x - x2), Math.max(y1 - y, 0, y - y2));
+}
+
 function pageAt(x, y) {
   return [...document.querySelectorAll(".manga-jisho-page")].find(page => {
-    const box = page.getBoundingClientRect();
-    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+    const { left, top, right, bottom } = page.getBoundingClientRect();
+    return contains([left, top, right, bottom], x, y);
   });
 }
 
 async function readPage(page) {
   const source = page.tagName === "IMG" ? sourceOf(page) : page.toDataURL("image/jpeg");
-  console.log("[manga-jisho] reading", sourceOf(page));
-
-  const started = performance.now();
   const result = await chrome.runtime.sendMessage({ type: "ocr", source, referrer: location.href });
-  const seconds = ((performance.now() - started) / 1000).toFixed(1);
+  if (result.error) throw new Error(result.error);
+  return result;
+}
 
-  if (result.error) {
-    console.warn("[manga-jisho]", result.error);
-  } else {
-    console.log("[manga-jisho]", result.blocks.length, "blocks in", seconds, "s", result.blocks);
-  }
+function resultFor(page) {
+  const key = page.tagName === "IMG" ? sourceOf(page) : page;
+  if (results.has(key)) return results.get(key);
+
+  results.set(key, null);
+  page.classList.add("manga-jisho-reading");
+  const started = performance.now();
+  readPage(page)
+    .then(result => {
+      results.set(key, result);
+      const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      console.log("[manga-jisho]", result.blocks.length, "blocks in", seconds, "s", result.blocks);
+      update();
+    })
+    .catch(error => console.warn("[manga-jisho]", error.message))
+    .finally(() => page.classList.remove("manga-jisho-reading"));
+  return null;
+}
+
+function wordAt(block, x, y) {
+  if (!block.lines.length) return null;
+  const line = block.lines.reduce((best, line) =>
+    distance(line.box, x, y) < distance(best.box, x, y) ? line : best);
+
+  const [x1, y1, x2, y2] = line.box;
+  const along = block.vertical ? (y - y1) / (y2 - y1) : (x - x1) / (x2 - x1);
+  const index = line.start + Math.floor(Math.min(Math.max(along, 0), 0.999) * line.text.length);
+  const token = block.tokens.find(token => index >= token.start && index < token.end);
+  return token && { line, token };
+}
+
+function wordBox({ line, token }, vertical) {
+  const [x1, y1, x2, y2] = line.box;
+  const length = line.text.length;
+  const from = (Math.max(token.start, line.start) - line.start) / length;
+  const to = (Math.min(token.end, line.start + length) - line.start) / length;
+  return vertical
+    ? [x1, y1 + from * (y2 - y1), x2, y1 + to * (y2 - y1)]
+    : [x1 + from * (x2 - x1), y1, x1 + to * (x2 - x1), y2];
+}
+
+function place(mark, box, scale, [x1, y1, x2, y2]) {
+  Object.assign(mark.style, {
+    display: "block",
+    left: `${box.left + x1 * scale.x}px`,
+    top: `${box.top + y1 * scale.y}px`,
+    width: `${(x2 - x1) * scale.x}px`,
+    height: `${(y2 - y1) * scale.y}px`,
+  });
+}
+
+function update() {
+  blockMark.style.display = wordMark.style.display = "none";
+  const page = pageAt(mouse.x, mouse.y);
+  const result = page && resultFor(page);
+  if (!result) return;
+
+  const box = page.getBoundingClientRect();
+  const scale = { x: box.width / result.width, y: box.height / result.height };
+  const x = (mouse.x - box.left) / scale.x;
+  const y = (mouse.y - box.top) / scale.y;
+
+  const block = result.blocks.find(block => contains(block.box, x, y));
+  if (!block) return;
+  place(blockMark, box, scale, block.box);
+
+  const word = wordAt(block, x, y);
+  if (!word) return;
+  place(wordMark, box, scale, wordBox(word, block.vertical));
+  wordMark.dataset.word = `${word.token.text} → ${word.token.base}`;
 }
 
 addEventListener("mousemove", event => {
   mouse.x = event.clientX;
   mouse.y = event.clientY;
+  update();
 }, { passive: true });
 
-addEventListener("keydown", event => {
-  if (!event.altKey || event.code !== "KeyO") return;
-  const page = pageAt(mouse.x, mouse.y);
-  if (!page) {
-    console.log("[manga-jisho] no page under the mouse");
-    return;
-  }
-  event.preventDefault();
-  readPage(page).catch(error => console.warn("[manga-jisho]", error.message));
-});
+addEventListener("scroll", update, { capture: true, passive: true });
 
 new MutationObserver(scanSoon).observe(document.documentElement, {
   childList: true,

@@ -15,16 +15,35 @@ def find_image(name):
     return path if path.exists() else TEST_IMAGES / name
 
 
+def bounds(points):
+    xs, ys = zip(*points)
+    return [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
+
+
+def read_lines(block):
+    lines, start = [], 0
+    for text, points in zip(block["lines"], block["lines_coords"]):
+        if text:
+            lines.append({"text": text, "start": start, "box": bounds(points)})
+        start += len(text)
+    return lines
+
+
 def read_page(ocr, path):
     page = ocr(path)
-    return [
-        {
-            "box": [int(n) for n in block["box"]],
-            "vertical": bool(block["vertical"]),
-            "text": "".join(block["lines"]),
-        }
-        for block in page["blocks"]
-    ]
+    return {
+        "width": page["img_width"],
+        "height": page["img_height"],
+        "blocks": [
+            {
+                "box": [int(n) for n in block["box"]],
+                "vertical": bool(block["vertical"]),
+                "text": "".join(block["lines"]),
+                "lines": read_lines(block),
+            }
+            for block in page["blocks"]
+        ],
+    }
 
 
 def translate(texts, key, target="EN-US"):
@@ -61,7 +80,7 @@ if __name__ == "__main__":
 
     ocr = MangaPageOcr()
     start = time.time()
-    blocks = read_page(ocr, path)
+    blocks = read_page(ocr, path)["blocks"]
     print(f"\n{path.name}: {len(blocks)} text blocks in {time.time() - start:.1f}s\n")
 
     if key and blocks:
