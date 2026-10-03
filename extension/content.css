@@ -8,8 +8,7 @@
 }
 
 .manga-jisho-block,
-.manga-jisho-word,
-.manga-jisho-popup {
+.manga-jisho-word {
   display: none;
   position: fixed;
   z-index: 2147483647;
@@ -23,63 +22,4 @@
 
 .manga-jisho-word {
   background: rgba(255, 210, 0, 0.4);
-}
-
-.manga-jisho-popup {
-  max-width: 360px;
-  max-height: 70vh;
-  overflow: hidden;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #1e1f24;
-  color: #e8e8ea;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-  font: 13px/1.45 system-ui, sans-serif;
-  text-align: left;
-  writing-mode: horizontal-tb;
-}
-
-.manga-jisho-popup * {
-  margin: 0;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  letter-spacing: normal;
-}
-
-.manga-jisho-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.manga-jisho-head:first-child {
-  margin-top: 0;
-}
-
-.manga-jisho-popup .manga-jisho-written {
-  font-size: 20px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.manga-jisho-popup .manga-jisho-reading {
-  font-size: 14px;
-  color: #9fd3ff;
-}
-
-.manga-jisho-popup .manga-jisho-senses {
-  margin: 2px 0 0 18px;
-  list-style: decimal;
-}
-
-.manga-jisho-popup .manga-jisho-pos {
-  margin-right: 6px;
-  font-size: 11px;
-  color: #a0a3ad;
-}
-
-.manga-jisho-popup .manga-jisho-missing {
-  color: #a0a3ad;
 }

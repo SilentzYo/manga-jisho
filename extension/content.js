@@ -1,6 +1,5 @@
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 400;
-const MAX_SENSES = 4;
 const pages = new WeakMap();
 const results = new Map();
 const lookups = new Map();
@@ -11,8 +10,7 @@ let shownWord = null;
 const overlay = create("div", "manga-jisho-overlay");
 const blockMark = create("div", "manga-jisho-block");
 const wordMarks = create("div");
-const popup = create("div", "manga-jisho-popup");
-overlay.append(blockMark, wordMarks, popup);
+overlay.append(blockMark, wordMarks);
 document.documentElement.append(overlay);
 
 function create(tag, className, text) {
@@ -136,42 +134,8 @@ function place(mark, box, scale, [x1, y1, x2, y2]) {
   });
 }
 
-function render(word) {
-  popup.replaceChildren();
-  if (!word.entries.length) {
-    popup.append(create("div", "manga-jisho-missing", `${word.word}: not in the dictionary`));
-  }
-  for (const entry of word.entries) {
-    const head = create("div", "manga-jisho-head");
-    head.append(create("span", "manga-jisho-written", entry.kanji[0] ?? entry.kana[0] ?? word.word));
-    if (entry.kanji.length && entry.kana.length) {
-      head.append(create("span", "manga-jisho-reading", entry.kana[0]));
-    }
-
-    const senses = create("ol", "manga-jisho-senses");
-    for (const sense of entry.senses.slice(0, MAX_SENSES)) {
-      const item = create("li");
-      item.append(create("span", "manga-jisho-pos", sense.pos.join(", ")), sense.glosses.join("; "));
-      senses.append(item);
-    }
-    popup.append(head, senses);
-  }
-}
-
-function showPopup() {
-  popup.style.display = "block";
-  const { width, height } = popup.getBoundingClientRect();
-  let left = mouse.x + 16;
-  let top = mouse.y + 16;
-  if (left + width > innerWidth - 8) left = mouse.x - width - 16;
-  if (top + height > innerHeight - 8) top = innerHeight - height - 8;
-  popup.style.left = `${Math.max(8, left)}px`;
-  popup.style.top = `${Math.max(8, top)}px`;
-}
-
 function hideWord() {
   wordMarks.replaceChildren();
-  popup.style.display = "none";
   shownWord = null;
 }
 
@@ -185,8 +149,7 @@ function showWord(block, box, scale, word) {
   const id = `${word.start}:${word.end}:${block.text}`;
   if (id === shownWord) return;
   shownWord = id;
-  render(word);
-  showPopup();
+  chrome.runtime.sendMessage({ type: "word", word, sentence: block.text }).catch(() => {});
 }
 
 function hovered() {

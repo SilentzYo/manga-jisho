@@ -1,5 +1,7 @@
 const SERVER = "http://localhost:7331";
 
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+
 const handlers = {
   ocr: message => ocr(message.source, message.referrer),
   lookup: message => lookUp(message.text, message.at),
