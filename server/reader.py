@@ -1,4 +1,5 @@
 import io
+import re
 import sys
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from translator import TranslationError, translate
 TEST_IMAGES = Path(__file__).parent.parent / "testimg"
 OCR_THREADS = 6
 BATCH_SIZE = 32
+JAPANESE = re.compile(r"[぀-ヿ㐀-鿿]")
 
 
 def find_image(name):
@@ -79,7 +81,17 @@ class PageReader:
         return erase(*self.detect(path))
 
     def read(self, path, model="accurate"):
+        return self.transcribe(*self.detect(path), model)
+
+    def prepare(self, path, model="accurate"):
         image, mask, blocks = self.detect(path)
+        page = self.transcribe(image, mask, blocks, model)
+        keep = [n for n, block in enumerate(page["blocks"]) if JAPANESE.search(block["text"])]
+        page["blocks"] = [page["blocks"][n] for n in keep]
+        clean, backgrounds = erase(image, mask, [blocks[n] for n in keep])
+        return page, clean, backgrounds
+
+    def transcribe(self, image, mask, blocks, model):
         coords = [block.lines_array() for block in blocks]
 
         crops, owners = [], []
@@ -101,6 +113,7 @@ class PageReader:
                 {
                     "box": [int(n) for n in block.xyxy],
                     "vertical": bool(block.vertical),
+                    "font_size": round(float(block.font_size)),
                     "text": "".join(lines),
                     "lines": read_lines(lines, block_coords),
                 }
@@ -126,8 +139,13 @@ def read(data, model):
 
 
 def clean(data):
-    _, png = cv2.imencode(".png", page_reader.clean(io.BytesIO(data)))
+    image, _ = page_reader.clean(io.BytesIO(data))
+    _, png = cv2.imencode(".png", image)
     return png.tobytes()
+
+
+def prepare(data, model):
+    return page_reader.prepare(io.BytesIO(data), model)
 
 
 def show_boxes(path, blocks):

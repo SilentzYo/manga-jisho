@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Response, UploadFile
 from mokuro.utils import InvalidImage
 from pydantic import BaseModel
 
 import reader
 from dictionary import lookup
 from translator import TARGET, TranslationError, translate
+from typesetter import as_png, find_bubbles, typeset
 
 ocr_worker = None
 
@@ -65,6 +66,22 @@ def translate_texts(request: Translation):
         return {"translations": translate(request.texts, request.key, request.target)}
     except TranslationError as error:
         raise HTTPException(502, str(error))
+
+
+@app.post("/translate-page")
+async def translate_page(
+    image: UploadFile,
+    model: Literal["accurate", "fast"] = "accurate",
+    key: str | None = Form(None),
+):
+    page, clean, backgrounds = await on_image(image, reader.prepare, model)
+    bubbles = await asyncio.to_thread(find_bubbles, clean, page["blocks"], backgrounds)
+    try:
+        english = await asyncio.to_thread(translate, [bubble.text for bubble in bubbles], key)
+    except TranslationError as error:
+        raise HTTPException(502, str(error))
+    picture = await asyncio.to_thread(typeset, clean, bubbles, english)
+    return Response(as_png(picture), media_type="image/png")
 
 
 if __name__ == "__main__":

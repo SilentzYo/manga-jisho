@@ -23,7 +23,7 @@ def erase_block(image, mask, block):
     region = image[top:bottom, left:right]
     around = region[~text]
     if not len(around):
-        return
+        return None
 
     colour = np.median(around, axis=0)
     if (np.abs(around - colour).max(axis=1) < SAME_COLOUR).mean() > PLAIN_SHARE:
@@ -31,15 +31,15 @@ def erase_block(image, mask, block):
         inside[max(0, y1 - top - 2):y2 - top + 2, max(0, x1 - left - 2):x2 - left + 2] = True
         marks = np.abs(region.astype(int) - colour).max(axis=2) > LEFTOVER
         region[text | (inside & marks)] = colour
-    else:
-        region[:] = cv2.inpaint(region, text.astype(np.uint8) * 255, 5, cv2.INPAINT_TELEA)
+        return colour
+    region[:] = cv2.inpaint(region, text.astype(np.uint8) * 255, 5, cv2.INPAINT_TELEA)
+    return None
 
 
 def erase(image, mask, blocks):
     clean = image.copy()
-    for block in blocks:
-        erase_block(clean, mask, block)
-    return clean
+    backgrounds = [erase_block(clean, mask, block) for block in blocks]
+    return clean, backgrounds
 
 
 if __name__ == "__main__":
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for name in sys.argv[1:] or ["01.jpg"]:
         path = find_image(name)
-        clean = reader.clean(path)
+        clean, _ = reader.clean(path)
         out = OUTPUT / f"{path.stem}.png"
         cv2.imwrite(str(out), clean)
         print("Saved", out)
