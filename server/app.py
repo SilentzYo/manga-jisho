@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Response, UploadFile
 from mokuro.utils import InvalidImage
 from pydantic import BaseModel
 
@@ -30,13 +30,22 @@ async def lifespan(app):
 app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration": True})
 
 
-@app.post("/ocr")
-async def ocr(image: UploadFile, model: Literal["accurate", "fast"] = "accurate"):
+async def on_image(image, fn, *args):
     data = await image.read()
     try:
-        return await in_worker(reader.read, data, model)
+        return await in_worker(fn, data, *args)
     except InvalidImage:
         raise HTTPException(400, "That file isn't an image")
+
+
+@app.post("/ocr")
+async def ocr(image: UploadFile, model: Literal["accurate", "fast"] = "accurate"):
+    return await on_image(image, reader.read, model)
+
+
+@app.post("/clean")
+async def clean(image: UploadFile):
+    return Response(await on_image(image, reader.clean), media_type="image/png")
 
 
 @app.get("/lookup")

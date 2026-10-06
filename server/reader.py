@@ -10,6 +10,7 @@ from mokuro.manga_page_ocr import MangaPageOcr
 from mokuro.utils import imread
 from PIL import Image, ImageDraw
 
+from cleaner import erase
 from translator import TranslationError, translate
 
 TEST_IMAGES = Path(__file__).parent.parent / "testimg"
@@ -69,9 +70,16 @@ class PageReader:
             texts += [post_process(text) for text in self.lines.tokenizer.batch_decode(ids, skip_special_tokens=True)]
         return texts
 
-    def read(self, path, model="accurate"):
+    def detect(self, path):
         image = imread(path)
         _, mask, blocks = self.pages.text_detector(image, refine_mode=1, keep_undetected_mask=True)
+        return image, mask, blocks
+
+    def clean(self, path):
+        return erase(*self.detect(path))
+
+    def read(self, path, model="accurate"):
+        image, mask, blocks = self.detect(path)
         coords = [block.lines_array() for block in blocks]
 
         crops, owners = [], []
@@ -115,6 +123,11 @@ def ready():
 
 def read(data, model):
     return page_reader.read(io.BytesIO(data), model)
+
+
+def clean(data):
+    _, png = cv2.imencode(".png", page_reader.clean(io.BytesIO(data)))
+    return png.tobytes()
 
 
 def show_boxes(path, blocks):
