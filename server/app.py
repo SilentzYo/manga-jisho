@@ -6,9 +6,11 @@ from typing import Literal
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
 from mokuro.utils import InvalidImage
+from pydantic import BaseModel
 
 import reader
 from dictionary import lookup
+from translator import TARGET, TranslationError, translate
 
 ocr_worker = None
 
@@ -40,6 +42,20 @@ async def ocr(image: UploadFile, model: Literal["accurate", "fast"] = "accurate"
 @app.get("/lookup")
 def look_up(text: str, at: int):
     return lookup(text, at)
+
+
+class Translation(BaseModel):
+    texts: list[str]
+    target: str = TARGET
+    key: str | None = None
+
+
+@app.post("/translate")
+def translate_texts(request: Translation):
+    try:
+        return {"translations": translate(request.texts, request.key, request.target)}
+    except TranslationError as error:
+        raise HTTPException(502, str(error))
 
 
 if __name__ == "__main__":

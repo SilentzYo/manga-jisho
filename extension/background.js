@@ -43,7 +43,9 @@ async function download(source, referrer) {
       },
     }],
   });
-  return fetch(source, { credentials: "include" });
+  return fetch(source, { credentials: "include" }).catch(() => {
+    throw new Error("Couldn't download the page, the site or another extension blocked it");
+  });
 }
 
 async function ocr(source, referrer, model) {

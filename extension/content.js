@@ -77,8 +77,24 @@ function pageAt(x, y) {
   });
 }
 
+function asDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function imageOf(page) {
+  if (page.tagName !== "IMG") return page.toDataURL("image/jpeg");
+  const source = sourceOf(page);
+  const response = await fetch(source).catch(() => null);
+  return response?.ok ? asDataUrl(await response.blob()) : source;
+}
+
 async function readPage(page) {
-  const source = page.tagName === "IMG" ? sourceOf(page) : page.toDataURL("image/jpeg");
+  const source = await imageOf(page);
   const result = await chrome.runtime.sendMessage({
     type: "ocr",
     source,

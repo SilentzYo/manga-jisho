@@ -1,16 +1,16 @@
 import io
-import os
 import sys
 import time
 from pathlib import Path
 
 import cv2
-import requests
 import torch
 from manga_ocr.ocr import post_process
 from mokuro.manga_page_ocr import MangaPageOcr
 from mokuro.utils import imread
 from PIL import Image, ImageDraw
+
+from translator import TranslationError, translate
 
 TEST_IMAGES = Path(__file__).parent.parent / "testimg"
 OCR_THREADS = 6
@@ -117,23 +117,6 @@ def read(data, model):
     return page_reader.read(io.BytesIO(data), model)
 
 
-def translate(texts, key, target="EN-US"):
-    host = "api-free.deepl.com" if key.endswith(":fx") else "api.deepl.com"
-    response = requests.post(
-        f"https://{host}/v2/translate",
-        headers={"Authorization": f"DeepL-Auth-Key {key}"},
-        json={
-            "text": texts,
-            "source_lang": "JA",
-            "target_lang": target,
-            "context": "\n".join(texts),
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    return [t["text"] for t in response.json()["translations"]]
-
-
 def show_boxes(path, blocks):
     image = Image.open(path).convert("RGB")
     draw = ImageDraw.Draw(image)
@@ -147,19 +130,17 @@ def show_boxes(path, blocks):
 if __name__ == "__main__":
     args = [arg for arg in sys.argv[1:] if arg != "--show"]
     path = find_image(args[0] if args else "01.jpg")
-    key = os.environ.get("DEEPL_API_KEY")
 
     reader = PageReader()
     start = time.time()
     blocks = reader.read(path)["blocks"]
     print(f"\n{path.name}: {len(blocks)} text blocks in {time.time() - start:.1f}s\n")
 
-    if key and blocks:
-        translations = translate([block["text"] for block in blocks], key)
-    else:
+    try:
+        translations = translate([block["text"] for block in blocks])
+    except TranslationError as error:
         translations = [""] * len(blocks)
-        if not key:
-            print("No DEEPL_API_KEY\n")
+        print(error, "\n")
 
     for number, (block, english) in enumerate(zip(blocks, translations), 1):
         direction = "vertical" if block["vertical"] else "horizontal"
