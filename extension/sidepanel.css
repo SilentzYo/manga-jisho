@@ -6,6 +6,8 @@
   --accent: #0b6bcb;
   --line: #e3e5e8;
   --mark: rgba(255, 200, 0, 0.45);
+  --notice: #fff4e5;
+  --notice-text: #8a4b00;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,7 +18,31 @@
     --accent: #9fd3ff;
     --line: #34363d;
     --mark: rgba(255, 210, 0, 0.35);
+    --notice: #3a2a14;
+    --notice-text: #ffcf8a;
   }
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#notice {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--notice);
+  color: var(--notice-text);
+  font-size: 13px;
+}
+
+#notice[hidden] {
+  display: none;
 }
 
 * {
@@ -158,4 +184,8 @@ summary {
 
 #settings input[type="number"] {
   width: 4em;
+}
+
+#settings input[type="password"] {
+  width: 12em;
 }

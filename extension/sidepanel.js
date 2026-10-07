@@ -2,31 +2,44 @@ const sentence = document.querySelector("#sentence");
 const jisho = document.querySelector("#jisho");
 const entries = document.querySelector("#entries");
 const form = document.querySelector("#settings");
+const notice = document.querySelector("#notice");
 let windowId;
+let noticeTimer;
 
 chrome.windows.getCurrent().then(current => windowId = current.id);
 
 chrome.storage.local.get(DEFAULT_SETTINGS).then(saved => {
-  form.elements.model.value = saved.model;
-  form.elements.readAhead.value = saved.readAhead;
-  form.elements.borders.checked = saved.borders;
+  for (const [name, value] of Object.entries(saved)) {
+    const field = form.elements[name];
+    if (field?.type === "checkbox") field.checked = value;
+    else if (field) field.value = value;
+  }
 });
 
-form.addEventListener("change", () => {
-  const readAhead = Math.round(Number(form.elements.readAhead.value));
-  form.elements.readAhead.value = Math.min(10, Math.max(0, readAhead || 0));
+document.addEventListener("change", () => {
+  const readAhead = Math.min(10, Math.max(0, Math.round(Number(form.elements.readAhead.value)) || 0));
+  form.elements.readAhead.value = readAhead;
   chrome.storage.local.set({
+    translate: form.elements.translate.checked,
+    deeplKey: form.elements.deeplKey.value.trim(),
     model: form.elements.model.value,
-    readAhead: Number(form.elements.readAhead.value),
+    readAhead,
     borders: form.elements.borders.checked,
   });
 });
 
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message.type === "word" && sender.tab?.windowId === windowId) {
-    show(message.word, message.sentence);
-  }
+  if (sender.tab?.windowId !== windowId) return;
+  if (message.type === "word") show(message.word, message.sentence);
+  if (message.type === "notice") showNotice(message.text);
 });
+
+function showNotice(text) {
+  notice.textContent = text;
+  notice.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => notice.hidden = true, 10000);
+}
 
 function create(tag, className, text) {
   const node = document.createElement(tag);

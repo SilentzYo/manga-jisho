@@ -1,3 +1,4 @@
+import base64
 import io
 import sys
 from dataclasses import dataclass, field
@@ -211,6 +212,12 @@ def as_png(image):
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     return buffer.getvalue()
+
+
+def as_data_url(image):
+    buffer = io.BytesIO()
+    image.save(buffer, "WEBP", quality=90)
+    return "data:image/webp;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
 def placeholder(japanese):

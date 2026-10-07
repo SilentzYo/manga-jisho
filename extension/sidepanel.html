@@ -8,6 +8,11 @@
 </head>
 <body>
   <header>
+    <label class="toggle">
+      <input name="translate" type="checkbox" form="settings">
+      <span>Translate pages</span>
+    </label>
+    <p id="notice" hidden></p>
     <p id="sentence" class="hint">Hold Shift and hover over a word on a manga page.</p>
     <a id="jisho" target="_blank" hidden></a>
   </header>
@@ -16,6 +21,10 @@
     <details>
       <summary>Settings</summary>
       <form id="settings">
+        <label>
+          <span>DeepL API key</span>
+          <input name="deeplKey" type="password" placeholder="Optional" autocomplete="off">
+        </label>
         <label>
           <span>OCR model</span>
           <select name="model">

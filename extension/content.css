@@ -24,3 +24,15 @@
 .manga-jisho-word {
   background: rgba(255, 210, 0, 0.4);
 }
+
+.manga-jisho-cover {
+  display: none;
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: none;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}

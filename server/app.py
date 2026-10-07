@@ -9,10 +9,11 @@ from mokuro.utils import InvalidImage
 from pydantic import BaseModel
 
 import reader
+import translator
 from dictionary import lookup
-from translator import TARGET, TranslationError, translate
-from typesetter import as_png, find_bubbles, typeset
+from typesetter import as_data_url, as_png, find_bubbles, typeset
 
+Model = Literal["accurate", "fast"]
 ocr_worker = None
 
 
@@ -39,9 +40,29 @@ async def on_image(image, fn, *args):
         raise HTTPException(400, "That file isn't an image")
 
 
+async def in_english(page, clean, backgrounds, key):
+    bubbles = await asyncio.to_thread(find_bubbles, clean, page["blocks"], backgrounds)
+    english = await asyncio.to_thread(translator.translate, [bubble.text for bubble in bubbles], key)
+    return await asyncio.to_thread(typeset, clean, bubbles, english)
+
+
 @app.post("/ocr")
-async def ocr(image: UploadFile, model: Literal["accurate", "fast"] = "accurate"):
-    return await on_image(image, reader.read, model)
+async def ocr(
+    image: UploadFile,
+    model: Model = "accurate",
+    translate: bool = Form(False),
+    key: str | None = Form(None),
+):
+    if not translate:
+        return await on_image(image, reader.read, model)
+
+    page, clean, backgrounds = await on_image(image, reader.prepare, model)
+    try:
+        picture = await in_english(page, clean, backgrounds, key)
+        page["translated"] = await asyncio.to_thread(as_data_url, picture)
+    except translator.TranslationError as error:
+        page["translation_error"] = str(error)
+    return page
 
 
 @app.post("/clean")
@@ -56,31 +77,25 @@ def look_up(text: str, at: int):
 
 class Translation(BaseModel):
     texts: list[str]
-    target: str = TARGET
+    target: str = translator.TARGET
     key: str | None = None
 
 
 @app.post("/translate")
 def translate_texts(request: Translation):
     try:
-        return {"translations": translate(request.texts, request.key, request.target)}
-    except TranslationError as error:
+        return {"translations": translator.translate(request.texts, request.key, request.target)}
+    except translator.TranslationError as error:
         raise HTTPException(502, str(error))
 
 
 @app.post("/translate-page")
-async def translate_page(
-    image: UploadFile,
-    model: Literal["accurate", "fast"] = "accurate",
-    key: str | None = Form(None),
-):
+async def translate_page(image: UploadFile, model: Model = "accurate", key: str | None = Form(None)):
     page, clean, backgrounds = await on_image(image, reader.prepare, model)
-    bubbles = await asyncio.to_thread(find_bubbles, clean, page["blocks"], backgrounds)
     try:
-        english = await asyncio.to_thread(translate, [bubble.text for bubble in bubbles], key)
-    except TranslationError as error:
+        picture = await in_english(page, clean, backgrounds, key)
+    except translator.TranslationError as error:
         raise HTTPException(502, str(error))
-    picture = await asyncio.to_thread(typeset, clean, bubbles, english)
     return Response(as_png(picture), media_type="image/png")
 
 

@@ -3,9 +3,12 @@ const MIN_HEIGHT = 400;
 const pages = new WeakMap();
 const results = new Map();
 const lookups = new Map();
+const covers = new Map();
+const coverShows = new WeakMap();
 const mouse = { x: 0, y: 0 };
 const settings = { ...DEFAULT_SETTINGS };
 let shift = false;
+let covering = false;
 let wanted = null;
 let shownWord = null;
 
@@ -24,6 +27,15 @@ function create(tag, className, text) {
 
 function sourceOf(element) {
   return element.tagName === "IMG" ? element.currentSrc || element.src : "canvas";
+}
+
+function keyOf(page) {
+  return page.tagName === "IMG" ? sourceOf(page) : page;
+}
+
+function notify(text) {
+  console.warn("[manga-jisho]", text);
+  chrome.runtime.sendMessage({ type: "notice", text }).catch(() => {});
 }
 
 function scan() {
@@ -100,13 +112,16 @@ async function readPage(page) {
     source,
     referrer: location.href,
     model: settings.model,
+    translate: settings.translate,
+    key: settings.deeplKey,
   });
   if (result.error) throw new Error(result.error);
   return result;
 }
 
 function resultFor(page) {
-  const key = page.tagName === "IMG" ? sourceOf(page) : page;
+  if (settings.translate) coverFor(page);
+  const key = keyOf(page);
   if (results.has(key)) return results.get(key);
 
   results.set(key, null);
@@ -117,11 +132,53 @@ function resultFor(page) {
       results.set(key, result);
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
       console.log("[manga-jisho]", result.blocks.length, "blocks in", seconds, "s", result.blocks);
+      if (result.translation_error) notify(result.translation_error);
       update();
     })
-    .catch(error => console.warn("[manga-jisho]", error.message))
+    .catch(error => notify(error.message))
     .finally(() => page.classList.remove("manga-jisho-reading"));
   return null;
+}
+
+function coverFor(page) {
+  if (!covers.has(page)) {
+    const cover = create("img", "manga-jisho-cover");
+    overlay.prepend(cover);
+    covers.set(page, cover);
+  }
+  if (!covering) {
+    covering = true;
+    requestAnimationFrame(placeCovers);
+  }
+}
+
+function placeCovers() {
+  for (const [page, cover] of covers) {
+    if (!page.isConnected) {
+      cover.remove();
+      covers.delete(page);
+      continue;
+    }
+    const result = settings.translate ? results.get(keyOf(page)) : null;
+    if (!result?.translated) {
+      cover.style.display = "none";
+      continue;
+    }
+    if (coverShows.get(cover) !== result) {
+      cover.src = result.translated;
+      coverShows.set(cover, result);
+    }
+    const { left, top, width, height } = page.getBoundingClientRect();
+    Object.assign(cover.style, {
+      display: "block",
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+    });
+  }
+  covering = settings.translate;
+  if (covering) requestAnimationFrame(placeCovers);
 }
 
 function lookUp(text, at) {
@@ -257,7 +314,8 @@ chrome.storage.local.get(DEFAULT_SETTINGS).then(saved => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   for (const [key, change] of Object.entries(changes)) settings[key] = change.newValue;
-  if (changes.model) results.clear();
+  const newTranslations = settings.translate && (changes.translate || changes.deeplKey);
+  if (changes.model || newTranslations) results.clear();
   applySettings();
 });
 
