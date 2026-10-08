@@ -1,4 +1,6 @@
+import argparse
 import asyncio
+import time
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -13,12 +15,23 @@ import translator
 from dictionary import lookup
 from typesetter import as_data_url, as_png, find_bubbles, typeset
 
+PORT = 7331
+IDLE_CHECK_SECONDS = 10
 Model = Literal["accurate", "fast"]
 ocr_worker = None
+server = None
+idle_minutes = None
+last_request = time.monotonic()
 
 
 def in_worker(fn, *args):
     return asyncio.get_running_loop().run_in_executor(ocr_worker, fn, *args)
+
+
+async def stop_when_idle():
+    while time.monotonic() - last_request < idle_minutes * 60:
+        await asyncio.sleep(IDLE_CHECK_SECONDS)
+    server.should_exit = True
 
 
 @asynccontextmanager
@@ -26,10 +39,33 @@ async def lifespan(app):
     global ocr_worker
     with ProcessPoolExecutor(1, initializer=reader.load) as ocr_worker:
         await in_worker(reader.ready)
+        watcher = asyncio.create_task(stop_when_idle()) if server and idle_minutes else None
         yield
+        if watcher:
+            watcher.cancel()
 
 
 app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"displayRequestDuration": True})
+
+
+@app.middleware("http")
+async def remember_activity(request, call_next):
+    global last_request
+    last_request = time.monotonic()
+    return await call_next(request)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/shutdown")
+def shut_down():
+    if server is None:
+        raise HTTPException(409, "This server can only be stopped with Ctrl+C")
+    server.should_exit = True
+    return {"status": "stopping"}
 
 
 async def on_image(image, fn, *args):
@@ -100,4 +136,10 @@ async def translate_page(image: UploadFile, model: Model = "accurate", key: str 
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, port=7331)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--idle", type=float, help="stop after this many minutes without requests")
+    options = parser.parse_args()
+    idle_minutes = options.idle
+    server = uvicorn.Server(uvicorn.Config(app, port=options.port))
+    server.run()

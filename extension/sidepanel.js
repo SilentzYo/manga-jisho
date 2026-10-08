@@ -29,9 +29,16 @@ document.addEventListener("change", () => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (sender.tab?.windowId !== windowId) return;
+  if (sender.tab && sender.tab.windowId !== windowId) return;
   if (message.type === "word") show(message.word, message.sentence);
   if (message.type === "notice") showNotice(message.text);
+});
+
+document.querySelector("#restart").addEventListener("click", async event => {
+  event.target.disabled = true;
+  const reply = await chrome.runtime.sendMessage({ type: "restart" }).catch(error => ({ error: error.message }));
+  if (reply?.error) showNotice(reply.error);
+  event.target.disabled = false;
 });
 
 function showNotice(text) {

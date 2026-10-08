@@ -1,10 +1,14 @@
 const SERVER = "http://localhost:7331";
+const LAUNCHER = "com.manga_jisho.server";
+const START_TIMEOUT = 90_000;
+let starting = null;
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
 const handlers = {
   ocr: message => ocr(message),
   lookup: message => lookUp(message.text, message.at),
+  restart: () => restart(),
 };
 
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
@@ -14,10 +18,51 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   return true;
 });
 
-async function server(path, options) {
-  const response = await fetch(`${SERVER}${path}`, options).catch(() => {
-    throw new Error("Can't reach the server, is it running?");
+function announce(text) {
+  chrome.runtime.sendMessage({ type: "notice", text }).catch(() => {});
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function healthy() {
+  return fetch(`${SERVER}/health`).then(response => response.ok, () => false);
+}
+
+async function launch() {
+  announce("Starting the server…");
+  await chrome.runtime.sendNativeMessage(LAUNCHER, { command: "start" }).catch(error => {
+    throw new Error(`Can't reach the server and couldn't start it (${error.message})`);
   });
+  for (const deadline = Date.now() + START_TIMEOUT; Date.now() < deadline; await wait(1000)) {
+    if (await healthy()) {
+      announce("The server is ready");
+      return;
+    }
+  }
+  throw new Error("The server didn't start, see server/data/server.log");
+}
+
+function startServer() {
+  starting ??= launch().finally(() => starting = null);
+  return starting;
+}
+
+async function restart() {
+  await fetch(`${SERVER}/shutdown`, { method: "POST" }).catch(() => null);
+  for (let tries = 0; tries < 30 && await healthy(); tries++) await wait(1000);
+  await startServer();
+  return { status: "ready" };
+}
+
+async function server(path, options) {
+  let response = await fetch(`${SERVER}${path}`, options).catch(() => null);
+  if (!response) {
+    await startServer();
+    response = await fetch(`${SERVER}${path}`, options).catch(() => null);
+  }
+  if (!response) throw new Error("Can't reach the server");
   if (!response.ok) throw new Error(`Server error (HTTP ${response.status})`);
   return response.json();
 }

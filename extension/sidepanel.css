@@ -189,3 +189,9 @@ summary {
 #settings input[type="password"] {
   width: 12em;
 }
+
+#restart {
+  justify-self: start;
+  font: inherit;
+  font-size: 13px;
+}

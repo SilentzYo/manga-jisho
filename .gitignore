@@ -33,4 +33,5 @@
 
 # Local data
 server/data/
+server/launcher/com.manga_jisho.server.json
 __pycache__/

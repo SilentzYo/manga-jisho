@@ -3,7 +3,7 @@
   "name": "Manga Jisho",
   "version": "0.1.0",
   "description": "Hover lookup and page translation for manga",
-  "permissions": ["declarativeNetRequestWithHostAccess", "sidePanel", "storage"],
+  "permissions": ["declarativeNetRequestWithHostAccess", "sidePanel", "storage", "nativeMessaging"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "Open Manga Jisho"
